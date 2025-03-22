@@ -107,9 +107,8 @@ export function activate(context: vscode.ExtensionContext) {
     componentTypeStatusBarItem.tooltip = isClient
       ? "This is a Client Component (runs in the browser)"
       : "This is a Server Component (runs on the server)";
-    componentTypeStatusBarItem.backgroundColor = isClient
-      ? new vscode.ThemeColor("statusBarItem.warningBackground")
-      : undefined;
+    componentTypeStatusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground")
+
     componentTypeStatusBarItem.show();
 
     // Show diagnostics if needed
