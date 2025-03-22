@@ -1,5 +1,6 @@
 {
   "name": "where-am-i-next",
+  "license": "MIT",
   "displayName": "where am i next",
   "description": "Detects and highlights client and server components in Next.js applications",
   "version": "0.0.1",
