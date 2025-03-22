@@ -3,6 +3,15 @@
   "displayName": "where am i next",
   "description": "Detects and highlights client and server components in Next.js applications",
   "version": "0.0.1",
+  "publisher": "qwelian",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qweliant/where-am-i-next.git"
+  },
+  "author": {
+    "name": "qwelian",
+    "email": "dmtorcode@tutanota.com"
+  },
   "engines": {
     "vscode": "^1.98.0"
   },
@@ -20,7 +29,7 @@
     "commands": [
       {
         "command": "where-am-i-next.toggleComponentType",
-        "title": "Hello World"
+        "title": "Where am I Next?"
       }
     ]
   },

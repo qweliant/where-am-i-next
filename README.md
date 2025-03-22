@@ -1,71 +1,75 @@
-# where-am-i-next README
+# Where Am I Next
 
-This is the README for your extension "where-am-i-next". After writing up a brief description, we recommend including the following sections.
+**Where Am I Next** is a VS Code extension that helps you identify whether you're working in a client or server component in Next.js applications.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **Component Type Detection**: Automatically detects if your current file is a client or server component
+- **Status Bar Indicator**: Shows component type (client/server) in the status bar for quick reference
+- **Diagnostic Warnings**: Alerts you when using client-side features without the `"use client"` directive
+- **Quick Fix**: One-click solution to add the `"use client"` directive when needed
+- **Toggle Command**: Easy switching between client and server components
 
-For example if there is an image subfolder under your extension project workspace:
+## How It Works
 
-\!\[feature X\]\(images/feature-x.png\)
+The extension analyzes your file in real-time to determine whether it's a client or server component based on:
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+- Presence of the `"use client"` directive
+- Usage of client-side React hooks (`useState`, `useEffect`, etc.)
+- Implementation of event handlers (`onClick`, `onChange`, etc.)
+
+## Installation
+
+1. Open VS Code
+2. Go to Extensions (or press `Ctrl+Shift+X`)
+3. Search for "Where Am I Next"
+4. Click Install
+
+Alternatively, you can install it directly from the marketplace:
+[VS Code Marketplace: Where Am I Next](https://marketplace.visualstudio.com/items?itemName=qwelian.where-am-i-next)
+
+## Usage
+
+Simply open any React component file in your Next.js project. The extension will automatically:
+
+1. Display the component type in the status bar
+2. Highlight potential issues with client/server component usage
+3. Offer quick fixes for common problems
+
+### Commands
+
+- `Where Am I Next: Toggle Component Type` - Switch between client and server component by adding/removing the `"use client"` directive
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- VS Code version 1.98.0 or higher
+- Next.js project using React components
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+This extension has no configurable settings at this time.
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+Please report any issues on the [GitHub repository](https://github.com/qwelian/where-am-i-next/issues).
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.1
 
-### 1.0.0
+- Initial release
+- Basic detection of client and server components
+- Status bar indicator
+- Quick fix for adding "use client" directive
 
-Initial release of ...
+## Contributing
 
-### 1.0.1
+Contributions are welcome! Feel free to submit pull requests or open issues on the GitHub repository.
 
-Fixed issue #.
+## License
 
-### 1.1.0
+This extension is licensed under the MIT License.
 
-Added features X, Y, and Z.
+## Author
 
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Created by [qwelian](mailto:dmtorcode@tutanota.com)

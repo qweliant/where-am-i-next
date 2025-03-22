@@ -92,14 +92,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     const isClient = isClientComponent(editor.document);
 
-    // Get the range for the entire document
-    const text = editor.document.getText();
-    const lastCharPosition = editor.document.positionAt(text.length);
-    const entireRange = new vscode.Range(
-      new vscode.Position(0, 0),
-      lastCharPosition
-    );
-
     // Update status bar
     componentTypeStatusBarItem.text = isClient
       ? "$(browser) Client Component"
@@ -107,7 +99,9 @@ export function activate(context: vscode.ExtensionContext) {
     componentTypeStatusBarItem.tooltip = isClient
       ? "This is a Client Component (runs in the browser)"
       : "This is a Server Component (runs on the server)";
-    componentTypeStatusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground")
+    componentTypeStatusBarItem.backgroundColor = new vscode.ThemeColor(
+      "statusBarItem.warningBackground"
+    );
 
     componentTypeStatusBarItem.show();
 
