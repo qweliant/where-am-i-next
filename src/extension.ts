@@ -25,7 +25,7 @@ function parseNextVersion(versionStr: string): number {
 
 function detectNextJs(workspaceRoot: string): NextJsInfo {
   const cached = nextJsInfoCache.get(workspaceRoot);
-  if (cached) return cached;
+  if (cached) {return cached;}
 
   const notNext: NextJsInfo = { isNextJs: false, majorVersion: 0, hasAppDir: false };
 
@@ -113,7 +113,7 @@ function isClientComponent(document: vscode.TextDocument): boolean {
   ];
 
   for (const hook of clientSideHooks) {
-    if (text.includes(hook)) return true;
+    if (text.includes(hook)) {return true;}
   }
 
   const eventHandlers = [
@@ -127,7 +127,7 @@ function isClientComponent(document: vscode.TextDocument): boolean {
   ];
 
   for (const handler of eventHandlers) {
-    if (text.includes(handler)) return true;
+    if (text.includes(handler)) {return true;}
   }
 
   return false;
@@ -287,8 +287,8 @@ export function activate(context: vscode.ExtensionContext) {
   // Event listeners
   vscode.window.onDidChangeActiveTextEditor(
     (editor) => {
-      if (editor) updateStatusBar(editor);
-      else statusBarItem.hide();
+      if (editor) {updateStatusBar(editor);}
+      else {statusBarItem.hide();}
     },
     null,
     context.subscriptions
@@ -313,7 +313,7 @@ export function activate(context: vscode.ExtensionContext) {
         const diagnostics = context.diagnostics.filter(
           (d) => d.code === "add-use-client"
         );
-        if (diagnostics.length === 0) return;
+        if (diagnostics.length === 0) {return;}
 
         const action = new vscode.CodeAction(
           'Add "use client" directive',
@@ -336,13 +336,13 @@ export function activate(context: vscode.ExtensionContext) {
     "where-am-i-next.toggleComponentType",
     async () => {
       const editor = vscode.window.activeTextEditor;
-      if (!editor || !isReactFile(editor.document)) return;
+      if (!editor || !isReactFile(editor.document)) {return;}
 
       const workspaceRoot = getWorkspaceRoot(editor.document.fileName);
-      if (!workspaceRoot) return;
+      if (!workspaceRoot) {return;}
 
       const nextInfo = detectNextJs(workspaceRoot);
-      if (!nextInfo.isNextJs || nextInfo.majorVersion < 13) return;
+      if (!nextInfo.isNextJs || nextInfo.majorVersion < 13) {return;}
 
       const text = editor.document.getText();
       const isClient =
