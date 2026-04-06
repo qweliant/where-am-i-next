@@ -1,122 +1,251 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
-  // Use the console to output diagnostic information (console.log) and errors (console.error)
-  // This line of code will only be executed once when your extension is activated
-  console.log(
-    'Congratulations, your extension "where-am-i-next" is now active!'
+interface NextJsInfo {
+  isNextJs: boolean;
+  majorVersion: number; // 0 = unknown/not found
+  hasAppDir: boolean;
+}
+
+// Cache per workspace folder path
+const nextJsInfoCache = new Map<string, NextJsInfo>();
+
+function getWorkspaceRoot(filePath: string): string | undefined {
+  const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath));
+  return folder?.uri.fsPath;
+}
+
+function parseNextVersion(versionStr: string): number {
+  // Handle semver ranges like "^13.4.0", "~14.0.0", "13.x", "latest", etc.
+  const cleaned = versionStr.replace(/[^0-9.]/g, "");
+  const major = parseInt(cleaned.split(".")[0], 10);
+  return isNaN(major) ? 0 : major;
+}
+
+function detectNextJs(workspaceRoot: string): NextJsInfo {
+  const cached = nextJsInfoCache.get(workspaceRoot);
+  if (cached) return cached;
+
+  const notNext: NextJsInfo = { isNextJs: false, majorVersion: 0, hasAppDir: false };
+
+  // Check for next.config.* as a strong signal
+  const configFiles = [
+    "next.config.js",
+    "next.config.ts",
+    "next.config.mjs",
+    "next.config.cjs",
+  ];
+  const hasConfig = configFiles.some((f) =>
+    fs.existsSync(path.join(workspaceRoot, f))
   );
 
-  // Create status bar item
-  const componentTypeStatusBarItem = vscode.window.createStatusBarItem(
+  // Read package.json for version
+  let majorVersion = 0;
+  const pkgPath = path.join(workspaceRoot, "package.json");
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+      const allDeps = {
+        ...(pkg.dependencies ?? {}),
+        ...(pkg.devDependencies ?? {}),
+      };
+      if (allDeps["next"]) {
+        majorVersion = parseNextVersion(allDeps["next"]);
+      } else if (!hasConfig) {
+        // No config file and no "next" dep — not a Next.js project
+        nextJsInfoCache.set(workspaceRoot, notNext);
+        return notNext;
+      }
+    } catch {
+      if (!hasConfig) {
+        nextJsInfoCache.set(workspaceRoot, notNext);
+        return notNext;
+      }
+    }
+  } else if (!hasConfig) {
+    nextJsInfoCache.set(workspaceRoot, notNext);
+    return notNext;
+  }
+
+  // Check for app directory (Next.js 13+ App Router)
+  const hasAppDir =
+    fs.existsSync(path.join(workspaceRoot, "app")) ||
+    fs.existsSync(path.join(workspaceRoot, "src", "app"));
+
+  const result: NextJsInfo = { isNextJs: true, majorVersion, hasAppDir };
+  nextJsInfoCache.set(workspaceRoot, result);
+  return result;
+}
+
+function isInPagesDir(filePath: string, workspaceRoot: string): boolean {
+  const rel = path.relative(workspaceRoot, filePath);
+  return rel.startsWith("pages" + path.sep) || rel.startsWith(path.join("src", "pages") + path.sep);
+}
+
+function isInAppDir(filePath: string, workspaceRoot: string): boolean {
+  const rel = path.relative(workspaceRoot, filePath);
+  return rel.startsWith("app" + path.sep) || rel.startsWith(path.join("src", "app") + path.sep);
+}
+
+function isReactFile(document: vscode.TextDocument): boolean {
+  const fileExtensions = [".jsx", ".tsx", ".js", ".ts"];
+  return fileExtensions.some((ext) => document.fileName.toLowerCase().endsWith(ext));
+}
+
+function isClientComponent(document: vscode.TextDocument): boolean {
+  const text = document.getText();
+
+  if (text.includes('"use client"') || text.includes("'use client'")) {
+    return true;
+  }
+
+  const clientSideHooks = [
+    "useState",
+    "useEffect",
+    "useContext",
+    "useReducer",
+    "useCallback",
+    "useMemo",
+    "useRef",
+    "useLayoutEffect",
+    "useRouter",
+  ];
+
+  for (const hook of clientSideHooks) {
+    if (text.includes(hook)) return true;
+  }
+
+  const eventHandlers = [
+    "onClick",
+    "onChange",
+    "onSubmit",
+    "onMouseOver",
+    "onKeyDown",
+    "onFocus",
+    "onBlur",
+  ];
+
+  for (const handler of eventHandlers) {
+    if (text.includes(handler)) return true;
+  }
+
+  return false;
+}
+
+export function activate(context: vscode.ExtensionContext) {
+  console.log('Extension "where-am-i-next" is now active!');
+
+  const statusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
     100
   );
-  context.subscriptions.push(componentTypeStatusBarItem);
+  context.subscriptions.push(statusBarItem);
 
-  // Function to check if file is a React component
-  function isReactComponent(document: vscode.TextDocument): boolean {
-    const fileExtensions = [".jsx", ".tsx", ".js", ".ts"];
-    const fileName = document.fileName.toLowerCase();
-    return fileExtensions.some((ext) => fileName.endsWith(ext));
-  }
+  // Invalidate cache when workspace files change (e.g. package.json edited)
+  const watcher = vscode.workspace.createFileSystemWatcher(
+    "**/package.json",
+    false,
+    false,
+    false
+  );
+  watcher.onDidChange(() => nextJsInfoCache.clear());
+  watcher.onDidCreate(() => nextJsInfoCache.clear());
+  watcher.onDidDelete(() => nextJsInfoCache.clear());
+  context.subscriptions.push(watcher);
 
-  // Function to check if a file is a client component
-  function isClientComponent(document: vscode.TextDocument): boolean {
-    const text = document.getText();
+  const configWatcher = vscode.workspace.createFileSystemWatcher(
+    "**/next.config.{js,ts,mjs,cjs}",
+    false,
+    false,
+    false
+  );
+  configWatcher.onDidChange(() => nextJsInfoCache.clear());
+  configWatcher.onDidCreate(() => nextJsInfoCache.clear());
+  configWatcher.onDidDelete(() => nextJsInfoCache.clear());
+  context.subscriptions.push(configWatcher);
 
-    // Check for "use client" directive
-    if (text.includes('"use client"') || text.includes("'use client'")) {
-      return true;
-    }
-
-    // Check for client-side hooks
-    const clientSideHooks = [
-      "useState",
-      "useEffect",
-      "useContext",
-      "useReducer",
-      "useCallback",
-      "useMemo",
-      "useRef",
-      "useLayoutEffect",
-      "useRouter",
-    ];
-
-    for (const hook of clientSideHooks) {
-      //   if (
-      //     (text.includes(`import`) && text.includes(hook)) ||
-      //     new RegExp(`\\b${hook}\\s*\\(`).test(text)
-      //   ) {
-      //     return true;
-      //   }
-      if (text.includes(hook)) {
-        return true;
-      }
-    }
-
-    // Check for event handlers
-    const eventHandlers = [
-      "onClick",
-      "onChange",
-      "onSubmit",
-      "onMouseOver",
-      "onKeyDown",
-      "onFocus",
-      "onBlur",
-    ];
-
-    for (const handler of eventHandlers) {
-      // Match patterns like: onClick={...} or onClick = {...}
-      //   if (new RegExp(`\\b${handler}\\s*=`).test(text)) {
-      //     return true;
-      //   }
-      if (text.includes(handler)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  // Function to update decorations
-  function updateDecorations(editor: vscode.TextEditor) {
-    if (!editor || !isReactComponent(editor.document)) {
-      componentTypeStatusBarItem.hide();
+  function updateStatusBar(editor: vscode.TextEditor) {
+    if (!editor || !isReactFile(editor.document)) {
+      statusBarItem.hide();
       return;
     }
 
-    const isClient = isClientComponent(editor.document);
+    const filePath = editor.document.fileName;
+    const workspaceRoot = getWorkspaceRoot(filePath);
 
-    // Update status bar
-    componentTypeStatusBarItem.text = isClient
-      ? "$(browser) Client Component"
-      : "$(server) Server Component";
-    componentTypeStatusBarItem.tooltip = isClient
-      ? "This is a Client Component (runs in the browser)"
-      : "This is a Server Component (runs on the server)";
-    componentTypeStatusBarItem.backgroundColor = new vscode.ThemeColor(
+    if (!workspaceRoot) {
+      statusBarItem.hide();
+      return;
+    }
+
+    const nextInfo = detectNextJs(workspaceRoot);
+
+    if (!nextInfo.isNextJs) {
+      statusBarItem.hide();
+      return;
+    }
+
+    const versionLabel =
+      nextInfo.majorVersion > 0 ? ` (v${nextInfo.majorVersion})` : "";
+
+    // Next.js < 13: only Pages Router existed
+    if (nextInfo.majorVersion > 0 && nextInfo.majorVersion < 13) {
+      statusBarItem.text = `$(file-code) Pages Router${versionLabel}`;
+      statusBarItem.tooltip = `Next.js${versionLabel}: Pages Router (no React Server Components)`;
+      statusBarItem.backgroundColor = undefined;
+      statusBarItem.show();
+      return;
+    }
+
+    // File is explicitly in pages/ directory
+    if (isInPagesDir(filePath, workspaceRoot)) {
+      statusBarItem.text = `$(file-code) Pages Router`;
+      statusBarItem.tooltip = "This file is in the Pages Router (pages/ directory)";
+      statusBarItem.backgroundColor = undefined;
+      statusBarItem.show();
+      return;
+    }
+
+    // Next.js 13+ App Router: detect client vs server
+    const isClient = isClientComponent(editor.document);
+    const inApp = isInAppDir(filePath, workspaceRoot);
+    const locationHint = inApp ? "" : " (outside app/)";
+
+    statusBarItem.text = isClient
+      ? `$(browser) Client Component`
+      : `$(server) Server Component`;
+    statusBarItem.tooltip = isClient
+      ? `Client Component — runs in the browser${locationHint}`
+      : `Server Component — runs on the server${locationHint}`;
+    statusBarItem.backgroundColor = new vscode.ThemeColor(
       "statusBarItem.warningBackground"
     );
+    statusBarItem.show();
 
-    componentTypeStatusBarItem.show();
-
-    // Show diagnostics if needed
     updateDiagnostics(editor.document);
   }
 
-  // Create diagnostic collection
+  // Diagnostic collection
   const diagnosticCollection =
     vscode.languages.createDiagnosticCollection("nextjs");
   context.subscriptions.push(diagnosticCollection);
 
-  // Function to update diagnostics
   function updateDiagnostics(document: vscode.TextDocument) {
-    if (!isReactComponent(document)) {
+    const workspaceRoot = getWorkspaceRoot(document.fileName);
+    if (!workspaceRoot) {
+      diagnosticCollection.delete(document.uri);
+      return;
+    }
+
+    const nextInfo = detectNextJs(workspaceRoot);
+
+    // Only warn about missing "use client" for Next.js 13+ app router files
+    if (
+      !nextInfo.isNextJs ||
+      nextInfo.majorVersion < 13 ||
+      isInPagesDir(document.fileName, workspaceRoot)
+    ) {
       diagnosticCollection.delete(document.uri);
       return;
     }
@@ -124,7 +253,6 @@ export function activate(context: vscode.ExtensionContext) {
     const text = document.getText();
     const diagnostics: vscode.Diagnostic[] = [];
 
-    // If it looks like a client component but doesn't have "use client"
     if (!text.includes('"use client"') && !text.includes("'use client'")) {
       const clientSideFeatures = [
         { name: "useState", regex: /\buseState\s*\(/ },
@@ -135,26 +263,19 @@ export function activate(context: vscode.ExtensionContext) {
       ];
 
       for (const feature of clientSideFeatures) {
-        const matches = text.match(feature.regex);
-        if (matches) {
-          // Find the position of the match
-          const index = text.indexOf(matches[0]);
-          const position = document.positionAt(index);
+        const match = text.match(feature.regex);
+        if (match && match.index !== undefined) {
+          const position = document.positionAt(match.index);
           const range = new vscode.Range(
             position,
-            position.translate(0, matches[0].length)
+            position.translate(0, match[0].length)
           );
-
-          // Create a diagnostic warning
           const diagnostic = new vscode.Diagnostic(
             range,
             `Client-side feature "${feature.name}" used without "use client" directive`,
             vscode.DiagnosticSeverity.Warning
           );
-
-          // Add code action identifier
           diagnostic.code = "add-use-client";
-
           diagnostics.push(diagnostic);
         }
       }
@@ -163,12 +284,11 @@ export function activate(context: vscode.ExtensionContext) {
     diagnosticCollection.set(document.uri, diagnostics);
   }
 
-  // Register event handlers
+  // Event listeners
   vscode.window.onDidChangeActiveTextEditor(
     (editor) => {
-      if (editor) {
-        updateDecorations(editor);
-      }
+      if (editor) updateStatusBar(editor);
+      else statusBarItem.hide();
     },
     null,
     context.subscriptions
@@ -178,67 +298,59 @@ export function activate(context: vscode.ExtensionContext) {
     (event) => {
       const editor = vscode.window.activeTextEditor;
       if (editor && event.document === editor.document) {
-        updateDecorations(editor);
+        updateStatusBar(editor);
       }
     },
     null,
     context.subscriptions
   );
 
-  // Register code action provider for quick fixes
+  // Code action provider
   const codeActionProvider = vscode.languages.registerCodeActionsProvider(
     ["javascript", "javascriptreact", "typescript", "typescriptreact"],
     {
-      provideCodeActions(document, range, context) {
-        // Filter to only our diagnostics
+      provideCodeActions(document, _range, context) {
         const diagnostics = context.diagnostics.filter(
           (d) => d.code === "add-use-client"
         );
+        if (diagnostics.length === 0) return;
 
-        if (diagnostics.length === 0) {
-          return;
-        }
-
-        // Create the quick fix
-        const actions: vscode.CodeAction[] = [];
         const action = new vscode.CodeAction(
           'Add "use client" directive',
           vscode.CodeActionKind.QuickFix
         );
-
         action.edit = new vscode.WorkspaceEdit();
         action.edit.insert(
           document.uri,
           new vscode.Position(0, 0),
           '"use client";\n\n'
         );
-
-        actions.push(action);
-        return actions;
+        return [action];
       },
     }
   );
   context.subscriptions.push(codeActionProvider);
 
-  // Command to toggle between client and server component
+  // Toggle command
   const toggleCommand = vscode.commands.registerCommand(
     "where-am-i-next.toggleComponentType",
     async () => {
       const editor = vscode.window.activeTextEditor;
-      if (!editor || !isReactComponent(editor.document)) {
-        return;
-      }
+      if (!editor || !isReactFile(editor.document)) return;
+
+      const workspaceRoot = getWorkspaceRoot(editor.document.fileName);
+      if (!workspaceRoot) return;
+
+      const nextInfo = detectNextJs(workspaceRoot);
+      if (!nextInfo.isNextJs || nextInfo.majorVersion < 13) return;
 
       const text = editor.document.getText();
       const isClient =
         text.includes('"use client"') || text.includes("'use client'");
-
       const edit = new vscode.WorkspaceEdit();
 
       if (isClient) {
-        // Remove "use client" directive
-        const regex = /(["']use client["'];\s*\n?)/;
-        const match = text.match(regex);
+        const match = text.match(/(["']use client["'];\s*\n?)/);
         if (match && match.index !== undefined) {
           const startPos = editor.document.positionAt(match.index);
           const endPos = editor.document.positionAt(
@@ -247,7 +359,6 @@ export function activate(context: vscode.ExtensionContext) {
           edit.delete(editor.document.uri, new vscode.Range(startPos, endPos));
         }
       } else {
-        // Add "use client" directive
         edit.insert(
           editor.document.uri,
           new vscode.Position(0, 0),
@@ -260,11 +371,10 @@ export function activate(context: vscode.ExtensionContext) {
   );
   context.subscriptions.push(toggleCommand);
 
-  // Check current editor on activation
+  // Initialize for current editor
   if (vscode.window.activeTextEditor) {
-    updateDecorations(vscode.window.activeTextEditor);
+    updateStatusBar(vscode.window.activeTextEditor);
   }
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}
